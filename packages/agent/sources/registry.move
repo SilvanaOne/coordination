@@ -13,6 +13,7 @@ public struct Agent has key, store {
     description: Option<String>,
     site: Option<String>,
     docker_image: String,
+    docker_sha256: Option<String>,
     min_memory_gb: u16,
     min_cpu_cores: u16,
     supports_tee: bool,
@@ -213,6 +214,7 @@ public fun add_agent(
     description: Option<String>,
     site: Option<String>,
     docker_image: String,
+    docker_sha256: Option<String>,
     min_memory_gb: u16,
     min_cpu_cores: u16,
     supports_tee: bool,
@@ -232,6 +234,7 @@ public fun add_agent(
         description,
         site,
         docker_image,
+        docker_sha256,
         min_memory_gb,
         min_cpu_cores,
         supports_tee,
@@ -251,6 +254,7 @@ public fun update_agent(
     description: Option<String>,
     site: Option<String>,
     docker_image: String,
+    docker_sha256: Option<String>,
     min_memory_gb: u16,
     min_cpu_cores: u16,
     supports_tee: bool,
@@ -270,6 +274,7 @@ public fun update_agent(
     agent.description = description;
     agent.site = site;
     agent.docker_image = docker_image;
+    agent.docker_sha256 = docker_sha256;
     agent.min_memory_gb = min_memory_gb;
     agent.min_cpu_cores = min_cpu_cores;
     agent.supports_tee = supports_tee;
