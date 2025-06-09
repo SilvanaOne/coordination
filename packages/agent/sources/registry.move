@@ -124,7 +124,7 @@ fun init(otw: REGISTRY, ctx: &mut TxContext) {
     transfer::public_transfer(display_registry, ctx.sender());
 }
 
-public fun create_registry(ctx: &mut TxContext, name: String) {
+public fun create_registry(name: String, ctx: &mut TxContext) {
     let registry = AgentRegistry {
         id: object::new(ctx),
         name,
@@ -136,7 +136,6 @@ public fun create_registry(ctx: &mut TxContext, name: String) {
 }
 
 public fun add_developer(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     name: String,
     github: String,
@@ -144,6 +143,7 @@ public fun add_developer(
     description: Option<String>,
     site: Option<String>,
     clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     let developer_id = object::new(ctx);
     let timestamp = clock.timestamp_ms();
@@ -170,7 +170,6 @@ public fun add_developer(
 const EInvalidOwner: vector<u8> = b"Invalid owner";
 
 public fun update_developer(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     name: String,
     github: String,
@@ -178,6 +177,7 @@ public fun update_developer(
     description: Option<String>,
     site: Option<String>,
     clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     let developer = object_table::borrow_mut(
         &mut registry.developers,
@@ -196,9 +196,9 @@ const ENotAdmin: vector<u8> = b"Not admin";
 
 #[allow(unused_variable)]
 public fun remove_developer(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     name: String,
+    ctx: &mut TxContext,
 ): Developer {
     assert!(registry.admin == ctx.sender(), ENotAdmin);
     let developer = object_table::remove(&mut registry.developers, name);
@@ -206,7 +206,6 @@ public fun remove_developer(
 }
 
 public fun add_agent(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     developer: String,
     name: String,
@@ -219,6 +218,7 @@ public fun add_agent(
     min_cpu_cores: u16,
     supports_tee: bool,
     clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     let developer_object = object_table::borrow_mut(
         &mut registry.developers,
@@ -246,7 +246,6 @@ public fun add_agent(
 }
 
 public fun update_agent(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     developer: String,
     name: String,
@@ -259,6 +258,7 @@ public fun update_agent(
     min_cpu_cores: u16,
     supports_tee: bool,
     clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     let developer_object = object_table::borrow_mut(
         &mut registry.developers,
@@ -282,10 +282,10 @@ public fun update_agent(
 }
 
 public fun remove_agent(
-    ctx: &mut TxContext,
     registry: &mut AgentRegistry,
     developer: String,
     name: String,
+    ctx: &mut TxContext,
 ): Agent {
     let developer_object = object_table::borrow_mut(
         &mut registry.developers,
