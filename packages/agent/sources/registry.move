@@ -4,7 +4,7 @@ use std::string::String;
 use sui::clock::{timestamp_ms, Clock};
 use sui::display;
 use sui::event;
-use sui::object_table;
+use sui::object_table::{Self, remove};
 use sui::package;
 
 public struct Agent has key, store {
@@ -290,17 +290,17 @@ public fun add_developer(
         owner: ctx.sender(),
         created_at: timestamp,
     });
-    object_table::add(
-        &mut registry.developers,
-        name,
-        developer,
-    );
-    if (object_table::contains(&registry.developers_index, ctx.sender())) {
-        let developer_names = object_table::borrow_mut(
-            &mut registry.developers_index,
-            ctx.sender(),
+    registry
+        .developers
+        .add(
+            name,
+            developer,
         );
-        vector::push_back(&mut developer_names.names, name);
+    if (registry.developers_index.contains(ctx.sender())) {
+        let developer_names = registry
+            .developers_index
+            .borrow_mut(ctx.sender());
+        developer_names.names.push_back(name);
         developer_names.version = developer_names.version + 1;
         event::emit(DeveloperNamesUpdatedEvent {
             id: developer_names.id.to_address(),
@@ -321,11 +321,12 @@ public fun add_developer(
             names: developer_names.names,
             version: developer_names.version,
         });
-        object_table::add(
-            &mut registry.developers_index,
-            address,
-            developer_names,
-        );
+        registry
+            .developers_index
+            .add(
+                ctx.sender(),
+                developer_names,
+            );
     }
 }
 
@@ -342,10 +343,7 @@ public fun update_developer(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let developer = object_table::borrow_mut(
-        &mut registry.developers,
-        name,
-    );
+    let developer = registry.developers.borrow_mut(name);
     assert!(developer.owner == ctx.sender(), EInvalidOwner);
     developer.github = github;
     developer.image = image;
@@ -374,11 +372,12 @@ const ENotAdmin: vector<u8> = b"Not admin";
 public fun remove_developer(
     registry: &mut AgentRegistry,
     name: String,
+    agent_names: vector<String>,
     clock: &Clock,
     ctx: &mut TxContext,
-): (Developer, Option<DeveloperNames>) {
+) {
     assert!(registry.admin == ctx.sender(), ENotAdmin);
-    let developer = object_table::remove(&mut registry.developers, name);
+    let developer = registry.developers.remove(name);
     event::emit(DeveloperDeletedEvent {
         id: developer.owner,
         name,
@@ -389,11 +388,10 @@ public fun remove_developer(
         version: developer.version,
         deleted_at: clock.timestamp_ms(),
     });
-    if (object_table::contains(&registry.developers_index, developer.owner)) {
-        let developer_names = object_table::borrow_mut(
-            &mut registry.developers_index,
-            developer.owner,
-        );
+    if (registry.developers_index.contains(developer.owner)) {
+        let developer_names = registry
+            .developers_index
+            .borrow_mut(developer.owner);
         let (found, index) = vector::index_of(&developer_names.names, &name);
         if (found) {
             vector::remove(&mut developer_names.names, index);
@@ -406,15 +404,21 @@ public fun remove_developer(
             version: developer_names.version,
         });
         if (vector::is_empty(&developer_names.names)) {
-            let developer_names = object_table::remove(
-                &mut registry.developers_index,
-                developer.owner,
-            );
-            return (developer, option::some(developer_names))
+            let developer_names = registry
+                .developers_index
+                .remove(developer.owner);
+            let DeveloperNames { id, .. } = developer_names;
+            object::delete(id);
         };
     };
 
-    (developer, option::none())
+    let Developer { id, mut agents, .. } = developer;
+    object::delete(id);
+    vector::do!(agent_names, |s| {
+        let Agent { id, .. } = agents.remove(s);
+        object::delete(id);
+    });
+    agents.destroy_empty();
 }
 
 public fun add_agent(
@@ -433,10 +437,7 @@ public fun add_agent(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let developer_object = object_table::borrow_mut(
-        &mut registry.developers,
-        developer,
-    );
+    let developer_object = registry.developers.borrow_mut(developer);
     assert!(developer_object.owner == ctx.sender(), EInvalidOwner);
     let agent_id = object::new(ctx);
     let address = agent_id.to_address();
@@ -471,7 +472,7 @@ public fun add_agent(
         chains,
         created_at: timestamp,
     });
-    object_table::add(&mut developer_object.agents, name, agent);
+    developer_object.agents.add(name, agent);
 }
 
 public fun update_agent(
@@ -490,15 +491,9 @@ public fun update_agent(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let developer_object = object_table::borrow_mut(
-        &mut registry.developers,
-        developer,
-    );
+    let developer_object = registry.developers.borrow_mut(developer);
     assert!(developer_object.owner == ctx.sender(), EInvalidOwner);
-    let agent: &mut Agent = object_table::borrow_mut(
-        &mut developer_object.agents,
-        name,
-    );
+    let agent: &mut Agent = developer_object.agents.borrow_mut(name);
     let timestamp = clock.timestamp_ms();
     agent.image = image;
     agent.description = description;
@@ -535,16 +530,10 @@ public fun remove_agent(
     name: String,
     clock: &Clock,
     ctx: &mut TxContext,
-): Agent {
-    let developer_object = object_table::borrow_mut(
-        &mut registry.developers,
-        developer,
-    );
+) {
+    let developer_object = registry.developers.borrow_mut(developer);
     assert!(developer_object.owner == ctx.sender(), EInvalidOwner);
-    let agent = object_table::borrow(
-        &developer_object.agents,
-        name,
-    );
+    let agent = developer_object.agents.borrow(name);
     let timestamp = clock.timestamp_ms();
     event::emit(AgentDeletedEvent {
         id: agent.id.to_address(),
@@ -561,11 +550,9 @@ public fun remove_agent(
         version: agent.version,
         deleted_at: timestamp,
     });
-    let agent = object_table::remove(
-        &mut developer_object.agents,
-        name,
-    );
-    agent
+    let agent = developer_object.agents.remove(name);
+    let Agent { id, .. } = agent;
+    object::delete(id);
 }
 
 public fun get_agent(
@@ -573,9 +560,6 @@ public fun get_agent(
     developer: String,
     agent: String,
 ): (&Developer, &Agent) {
-    let developer_object = object_table::borrow(
-        &registry.developers,
-        developer,
-    );
-    (developer_object, object_table::borrow(&developer_object.agents, agent))
+    let developer_object = registry.developers.borrow(developer);
+    (developer_object, developer_object.agents.borrow(agent))
 }
